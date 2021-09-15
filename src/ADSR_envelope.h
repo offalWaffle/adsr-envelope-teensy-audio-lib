@@ -34,7 +34,8 @@
 #define MAXAMPLITUDE 0b0111111111111111 //2's complement max value
 
 #define TABLERESOLUTION 100
-#define MULTIPLICATIONFACTOR 10
+#define MULTIPLICATIONFACTOR 10 //multiplication factor used to keep exponential function from overflowing
+
 
 
 class ExpLogCurveTable
