@@ -37,7 +37,7 @@
 #define LOG_CURVE 0
 #define EXP_CURVE 1
 
-
+#define DEFAULT_CURVE_BASE 1.5
 
 // TO DO retrigger noteon should have 2 options: start attack from current amplitude 
 //												or reset to 0 then retrigger from 0 amplitude
@@ -51,18 +51,21 @@
 
 
 AudioADSREnvelope::AudioADSREnvelope() 
-	: AudioStream(0, NULL)
+	: AudioStream(0, NULL),
+	totalCurveShapes(3)
 
 	
 {
 
-	curveShapeTable = new ExpLogCurveTable[3] {ExpLogCurveTable(1.5,  LOG_CURVE), ExpLogCurveTable(1,  LOG_CURVE), ExpLogCurveTable(1.5, EXP_CURVE)};
+	curveShapeTable = new ExpLogCurveTable[3] {ExpLogCurveTable(1.5,  LOG_CURVE), //logarithmic
+											   ExpLogCurveTable(1,  LOG_CURVE), //linear
+											   ExpLogCurveTable(1.5, EXP_CURVE)}; //exponential
+	
+	curveTablesOnTheHeap = true;
+
 	setAttackCurve(0);
 	setDecayCurve(2);
 	setReleaseCurve(2);
-
-
-
 
 	state = 0;
 	attack(10.5f);
@@ -71,33 +74,33 @@ AudioADSREnvelope::AudioADSREnvelope()
 	release(300.0f);
 	noteRetriggerRelease(5.0f);
 
-
-
-
-	// Serial.println("what??");
-	delay(10);
 	
 }
-
+AudioADSREnvelope::~AudioADSREnvelope()
+{
+	if(curveTablesOnTheHeap) delete[] curveShapeTable;
+}
 
 AudioADSREnvelope::AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes) 
 	: AudioStream(0, NULL) ,
 	curveShapeTable(ELCT) ,
 	totalCurveShapes(nbOfCurveShapes)
-	{
-		state = 0;
-		attack(10.5f);
-		decay(35.0f);
-		sustain(0.5f);
-		release(300.0f);
-		noteRetriggerRelease(5.0f);
+{
+	state = 0;
+	attack(10.5f);
+	decay(35.0f);
+	sustain(0.5f);
+	release(300.0f);
+	noteRetriggerRelease(5.0f);
 
-		setAttackCurve(0);
-		setDecayCurve(1);
-		setReleaseCurve(1);
-		delay(10);
-		
-	}
+	setAttackCurve(0);
+	setDecayCurve(1);
+	setReleaseCurve(1);
+	delay(10);
+	
+}
+
+
 
 
 
@@ -108,11 +111,6 @@ void AudioADSREnvelope::noteOn(void)
 	if (state == STATE_IDLE || release_forced_count == 0) {
 		startAmplitude = 0;
 		peakAmplitude = MAXAMPLITUDE;
-		// sustainAmplitude = level * peakAmplitude;
-
-		Serial.println("Note On!!  ");
-		
-		
 		state = STATE_ATTACK;
 		count = attack_count;
 		
@@ -120,14 +118,15 @@ void AudioADSREnvelope::noteOn(void)
 	} else if (state != STATE_FORCED) {
 		state = STATE_FORCED;
 		count = release_forced_count;
-		inc_hires = (-mult_hires) / (int32_t)count;
+		releaseStartAmplitude = targetAmplitude;
+		
 	}
 	__enable_irq();
 }
 
 void AudioADSREnvelope::noteOff(void)
 {
-	Serial.println("Note Off!!  ");
+
 	__disable_irq();
 	if (state != STATE_IDLE && state != STATE_FORCED) {
 
@@ -146,13 +145,9 @@ void AudioADSREnvelope::update(void)
 {
 	audio_block_t *block;
 	uint16_t *p, *end;
-	uint32_t sample12, sample34, sample56, sample78, tmp1, tmp2;
 
 	uint16_t sample[8];
 
-
-	
-	// Serial.println("Still idle!!  ");
 
 	block = allocate();
 	if (!block) return;
@@ -167,13 +162,9 @@ void AudioADSREnvelope::update(void)
 	
 
 	while (p < end) {
-		// we only care about the state when completing a region
-		
+
 		if (state == STATE_ATTACK) {
-			
-
-			
-
+		
 			// get target value for the next 8 samples using the curve lookup table
 			targetAmplitude = peakAmplitude * curveShapeTable[attackCurve].getCurveLookupValue((count / (float)attack_count));
 
@@ -181,20 +172,12 @@ void AudioADSREnvelope::update(void)
 			perSampleIncrement = (targetAmplitude - startAmplitude) / 8;
 
 
-			// Serial.println(count);
-			// Serial.print(0);Serial.print(", "); Serial.print(targetAmplitude); Serial.print(", "); Serial.println(MAXAMPLITUDE);
-
-
-
 			if (count == 0) 
-			{
-				// Serial.println("Progress check ");
-				// Serial.print("Decay!!  ");  
+			{ 
 				state = STATE_DECAY;
 				count = decay_count;
 			}
 
-			// continue;
 
 		} else if (state == STATE_DECAY) {
 
@@ -204,13 +187,9 @@ void AudioADSREnvelope::update(void)
 			//increase rate linear over 8 samples
 			perSampleIncrement = (targetAmplitude - startAmplitude) / 8;
 
-			// Serial.print(0);Serial.print(", "); Serial.print(targetAmplitude); Serial.print(", "); Serial.println(MAXAMPLITUDE);
-
-
 			if (count == 0) 
 			{
 				state = STATE_SUSTAIN;
-				// Serial.println("Sustain!!  ");
 				count = 0xFFFF;
 			}
 			
@@ -220,32 +199,21 @@ void AudioADSREnvelope::update(void)
 			perSampleIncrement = 0;
 			count = 0xFFFF;
 
-			// Serial.print(0);Serial.print(", "); Serial.print(targetAmplitude); Serial.print(", "); Serial.println(MAXAMPLITUDE);
-
-
 		} else if (state == STATE_RELEASE) {
 
-			// Serial.println("release!!  ");
-			
 			// get target value for the next 8 samples using the curve lookup table
 			targetAmplitude = releaseStartAmplitude * curveShapeTable[releaseCurve].getCurveLookupValue(count / (float)release_count);
 
 			//increase rate linear over 8 samples
 			perSampleIncrement = (targetAmplitude - startAmplitude) / 8;
 
-			// Serial.print(0);Serial.print(", "); Serial.print(targetAmplitude); Serial.print(", "); Serial.println(MAXAMPLITUDE);
-
-
 			if (count == 0) 
 			{
 				state = STATE_IDLE;
 				count = 0xFFFF;
 
-				// Serial.println("Idle!!  ");
 			}
 
-
-			
 			
 		} else if (state == STATE_IDLE) {
 			
@@ -253,10 +221,6 @@ void AudioADSREnvelope::update(void)
 			targetAmplitude = 0;
 			perSampleIncrement = 0;
 			count = 0xFFFF;
-			
-
-			// Serial.println("Idle case!!  ");
-			
 
 		} else if (state == STATE_FORCED) {
 			
@@ -278,30 +242,19 @@ void AudioADSREnvelope::update(void)
 		} 
 		
 
-		// sample[0] = startAmplitude * maxAmplitude;
-
-		
 		*p++ = startAmplitude;
-
-		Serial.println(startAmplitude);
-
 		uint16_t mult = startAmplitude;
 
 		for (int i = 1; i < 8; i++)
 		{
 			mult = mult + perSampleIncrement;
-
 			*p++ = mult; 
-			Serial.println(mult);
-
 		}
 
 		startAmplitude = targetAmplitude;
-
-
-
 		count--;
 	}
+
 	transmit(block);
 	release(block);
 }
@@ -397,68 +350,23 @@ void ExpLogCurveTable::generateLookupValues()
 
 }
 
+float mapFloat(float x, float in_min, float in_max, float out_min, float out_max)
+{
+
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 
 float ExpLogCurveTable::getCurveLookupValue (float input)
 {
 
-
-
-
-
-
     // input value expected between 0-1. scaledinput = multiply input by the table resolution
-
     float scaledInput = input * TABLERESOLUTION;
 
     // convert scaledinput to an int intScaledinput
-
     int intScaledInput = (int)scaledInput;
-
-    // float map function. use scaledinput as input. lowerinput =  intScaledinput, upperinput = intScaledinput + 1
-    // use tablelookup(intScaledinput) and tablelookup(intScaledinput + 1) as lower and upper output
-
 
     return mapFloat(scaledInput, (float) intScaledInput, (float) (intScaledInput + 1), curveLookupTable[intScaledInput], intScaledInput + 1 > TABLERESOLUTION ? curveLookupTable[intScaledInput] : curveLookupTable[intScaledInput + 1]);
 
-        
-
-
-
 }
 
-float ExpLogCurveTable::getRateAtLookupValue (float input)
-{
-
-
-
-
-
-
-    // input value expected between 0-1. scaledinput = multiply input by the table resolution
-
-    float scaledInput = input * TABLERESOLUTION;
-// convert scaledinput to an int intScaledinput
-
-    int intScaledInput = (int)scaledInput;
-
-    // float map function. use scaledinput as input. lowerinput =  intScaledinput, upperinput = intScaledinput + 1
-    // use tablelookup(intScaledinput) and tablelookup(intScaledinput + 1) as lower and upper output
-
-    return (intScaledInput + 1 > TABLERESOLUTION ? curveLookupTable[intScaledInput] : curveLookupTable[intScaledInput + 1] - curveLookupTable[intScaledInput]) * TABLERESOLUTION;
-
-
-        
-
-
-
-}
-
-
-
-float ExpLogCurveTable::mapFloat(float x, float in_min, float in_max, float out_min, float out_max)
-{
-
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-  

@@ -43,40 +43,32 @@ class ExpLogCurveTable
 	ExpLogCurveTable ();
     ExpLogCurveTable (float base, bool curveType );
 
+
     void generateLookupValues ();
-    float mapFloat(float x, float in_min, float in_max, float out_min, float out_max);
     void setBase(float base){powBase = base;}
     
 
-
     float getCurveLookupValue (float input);
-    float getRateAtLookupValue (float input);
     
 
     private:
+	float powBase;
     float multFactor;
-    //vector<float> curveLookupTable;
     float curveLookupTable[TABLERESOLUTION];
 
-
-    float powBase;
     bool curveType; //0 is exponential, 1 is logarithmic
     
 
 
-
 };
-
-/// 2 ways of creating the envelope. By passing it an array of ExpLogCurveTable objects to use.
 
 class AudioADSREnvelope : public AudioStream
 {
 public:
 	AudioADSREnvelope(); 
-
 	AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes);
 
-
+	~AudioADSREnvelope();
 
 	void noteOn();
 	void noteOff();
@@ -147,12 +139,10 @@ private:
 	uint8_t attackCurve, decayCurve, releaseCurve;
 	uint16_t targetAmplitude, startAmplitude, perSampleIncrement;
 	uint16_t peakAmplitude, releaseStartAmplitude, sustainAmplitude;
+	bool curveTablesOnTheHeap;
 
 
 };
-
-
-
 
 
 #undef SAMPLES_PER_MSEC
