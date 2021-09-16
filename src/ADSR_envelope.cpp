@@ -37,7 +37,7 @@
 #define LOG_CURVE 0
 #define EXP_CURVE 1
 
-#define DEFAULT_CURVE_BASE 1.5
+#define DEFAULT_CURVE_BASE 1.6
 
 // TO DO retrigger noteon should have 2 options: start attack from current amplitude 
 //												or reset to 0 then retrigger from 0 amplitude
@@ -57,9 +57,9 @@ AudioADSREnvelope::AudioADSREnvelope()
 	
 {
 
-	curveShapeTable = new ExpLogCurveTable[3] {ExpLogCurveTable(1.5,  LOG_CURVE), //logarithmic
-											   ExpLogCurveTable(1,  LOG_CURVE), //linear
-											   ExpLogCurveTable(1.5, EXP_CURVE)}; //exponential
+	curveShapeTable = new ExpLogCurveTable[3] {ExpLogCurveTable(DEFAULT_CURVE_BASE,  LOG_CURVE), //logarithmic
+											   ExpLogCurveTable(1,  EXP_CURVE), //linear
+											   ExpLogCurveTable(DEFAULT_CURVE_BASE, EXP_CURVE)}; //exponential
 	
 	curveTablesOnTheHeap = true;
 
@@ -146,8 +146,6 @@ void AudioADSREnvelope::update(void)
 	audio_block_t *block;
 	uint16_t *p, *end;
 
-	uint16_t sample[8];
-
 
 	block = allocate();
 	if (!block) return;
@@ -166,7 +164,7 @@ void AudioADSREnvelope::update(void)
 		if (state == STATE_ATTACK) {
 		
 			// get target value for the next 8 samples using the curve lookup table
-			targetAmplitude = peakAmplitude * curveShapeTable[attackCurve].getCurveLookupValue((count / (float)attack_count));
+			targetAmplitude = peakAmplitude * curveShapeTable[attackCurve].getCurveLookupValue(((attack_count - count) / (float)attack_count));
 
 			//increase rate linear over 8 samples
 			perSampleIncrement = (targetAmplitude - startAmplitude) / 8;
@@ -281,69 +279,32 @@ ExpLogCurveTable::ExpLogCurveTable (float base, bool curveType)
 multFactor (MULTIPLICATIONFACTOR),
 curveType (curveType)
 {
-
     generateLookupValues();
-
-
 }
 
 void ExpLogCurveTable::generateLookupValues()
 {
-    //curveLookupTable;
-
 
 	float ceiling = pow(powBase, multFactor - 1) +  (multFactor - 1) * pow(powBase, -1);
 
     if (curveType == LOG_CURVE)
     {
+		
         for (int i = 0; i < TABLERESOLUTION + 1; i++)
         {
-
-            // curveLookupTable[i] = 1 - ( pow(powBase, i/1 - tableResolution - 1) +  (i/1 - tableResolution - 1) * pow(powBase, -1));
-            
-            
-            // curveLookupTable[i] = 1 - ( pow(powBase, (tableResolution - i)/tableResolution - 1) +  ((tableResolution - i)   /tableResolution - 1) * pow(powBase, -1));
-        
-			curveLookupTable[i] =  1 - ((pow(powBase, (i * multFactor / TABLERESOLUTION) - 1) +  ((i * multFactor / TABLERESOLUTION) - 1) * pow(powBase, -1)) / ceiling);
-			
-
-            // Serial.println("curveLookupTable[i]");
-            // Serial.println(curveLookupTable[i]);
-        
-        }
-            
-            
-
-
-            
-
-        
+			curveLookupTable[TABLERESOLUTION - i] =  1 - ((pow(powBase, (i * multFactor / TABLERESOLUTION) - 1) +  ((i * multFactor / TABLERESOLUTION) - 1) * pow(powBase, -1)) / ceiling);
+		}
 
     }
     else if (curveType == EXP_CURVE)
     {
+
         for (int i = 0; i < TABLERESOLUTION + 1; i++)
         {
-
-        
-			// curveLookupTable[i] = ( pow(powBase, i/tableResolution - 1) +  (i/tableResolution - 1) * pow(powBase, -1));
-
 			curveLookupTable[i] = (pow(powBase, (i * multFactor / TABLERESOLUTION) - 1) +  ((i * multFactor / TABLERESOLUTION) - 1) * pow(powBase, -1)) / ceiling;
-			
-
-                // Serial.println("curveLookupTable[i]");
-            // Serial.println(curveLookupTable[i]);
-
         }
 
-
-
-
     }
-
-
-// tablelookup - 1 dimensional array with results from exponential curve formula generated in constructor
-
 
 
 
