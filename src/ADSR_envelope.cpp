@@ -51,13 +51,13 @@
 
 
 AudioADSREnvelope::AudioADSREnvelope() 
-	: AudioStream(0, NULL),
+	: AudioStream(1, inputQueueArray),
 	totalCurveShapes(3)
 
 	
 {
 
-	curveShapeTable = new ExpLogCurveTable[3] {ExpLogCurveTable(DEFAULT_CURVE_BASE,  LOG_CURVE), //logarithmic
+	curveShapeTable = new ExpLogCurveTable[totalCurveShapes] {ExpLogCurveTable(DEFAULT_CURVE_BASE,  LOG_CURVE), //logarithmic
 											   ExpLogCurveTable(1,  EXP_CURVE), //linear
 											   ExpLogCurveTable(DEFAULT_CURVE_BASE, EXP_CURVE)}; //exponential
 	
@@ -73,6 +73,8 @@ AudioADSREnvelope::AudioADSREnvelope()
 	sustain(0.5f);
 	release(300.0f);
 	noteRetriggerRelease(5.0f);
+
+	Serial.println("built adsr");
 
 	
 }
@@ -146,20 +148,36 @@ void AudioADSREnvelope::update(void)
 	audio_block_t *block;
 	uint16_t *p, *end;
 
+	
+	// delay(1);
+
+	//************
+	//set audioblock pointer and allocate
+	triggerInlet = receiveReadOnly(0);
+    if(!triggerInlet) return;
+	trig = triggerInlet->data;
+
+
+	
 
 	block = allocate();
 	if (!block) return;
 	if (state == STATE_IDLE) {
 		
-		release(block);
-		return;
+		// release(block);
+		// return;
 	}
 	p = (uint16_t *)(block->data);
 	end = p + AUDIO_BLOCK_SAMPLES;
 
-	
+	Serial.println("got this far!");
 
 	while (p < end) {
+
+		//************
+		Serial.println("got this far!");
+		checkInletState();
+
 
 		if (state == STATE_ATTACK) {
 		
@@ -253,7 +271,9 @@ void AudioADSREnvelope::update(void)
 		count--;
 	}
 
+
 	transmit(block);
+	release(triggerInlet);
 	release(block);
 }
 
@@ -269,6 +289,23 @@ bool AudioADSREnvelope::isSustain()
 	uint8_t current_state = *(volatile uint8_t *)&state;
 	if (current_state == STATE_SUSTAIN) return true;
 	return false;
+}
+
+void AudioADSREnvelope::checkInletState()
+{
+
+	Serial.println("got this far!");
+	if(inletState == LOW && *trig > 16384 ) 
+	{
+		inletState = HIGH;
+		noteOn();
+	}
+	else if (inletState == HIGH && *trig < 16384) 
+	{
+		inletState = LOW;
+		noteOff();
+	}
+	trig += 8;
 }
 
 
@@ -330,4 +367,5 @@ float ExpLogCurveTable::getCurveLookupValue (float input)
     return mapFloat(scaledInput, (float) intScaledInput, (float) (intScaledInput + 1), curveLookupTable[intScaledInput], intScaledInput + 1 > TABLERESOLUTION ? curveLookupTable[intScaledInput] : curveLookupTable[intScaledInput + 1]);
 
 }
+
 
