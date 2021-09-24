@@ -142,6 +142,15 @@ private:
 	bool curveTablesOnTheHeap;
 
 
+	audio_block_t * triggerInlet;
+	int16_t * trig;
+	bool inletState;
+	void checkInletState();
+	
+
+
+
+
 };
 
 
