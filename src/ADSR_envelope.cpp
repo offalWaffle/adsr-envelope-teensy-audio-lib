@@ -50,9 +50,11 @@
 
 
 
-AudioADSREnvelope::AudioADSREnvelope() 
+
+AudioADSREnvelope::AudioADSREnvelope(uint8_t voice_number = 0) 
 	: AudioStream(1, inputQueueArray),
-	totalCurveShapes(3)
+	totalCurveShapes(3), voiceNumber(voice_number)
+
 
 	
 {
@@ -83,10 +85,11 @@ AudioADSREnvelope::~AudioADSREnvelope()
 	if(curveTablesOnTheHeap) delete[] curveShapeTable;
 }
 
-AudioADSREnvelope::AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes) 
+AudioADSREnvelope::AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes, uint8_t voice_number = 0) 
 	: AudioStream(0, NULL) ,
 	curveShapeTable(ELCT) ,
-	totalCurveShapes(nbOfCurveShapes)
+	totalCurveShapes(nbOfCurveShapes),
+	voiceNumber(voice_number)
 {
 	state = 0;
 	attack(10.5f);
@@ -148,14 +151,17 @@ void AudioADSREnvelope::update(void)
 	audio_block_t *block;
 	uint16_t *p, *end;
 
-	
+
+	updateMidiInput();
+
 	// delay(1);
 
 	//************
 	//set audioblock pointer and allocate
-	triggerInlet = receiveReadOnly(0);
-    if(!triggerInlet) return;
-	trig = triggerInlet->data;
+
+	// triggerInlet = receiveReadOnly(0);
+    // if(!triggerInlet) return;
+	// trig = triggerInlet->data;
 
 
 	
@@ -170,13 +176,12 @@ void AudioADSREnvelope::update(void)
 	p = (uint16_t *)(block->data);
 	end = p + AUDIO_BLOCK_SAMPLES;
 
-	Serial.println("got this far!");
+
 
 	while (p < end) {
 
 		//************
-		Serial.println("got this far!");
-		checkInletState();
+
 
 
 		if (state == STATE_ATTACK) {
@@ -273,8 +278,54 @@ void AudioADSREnvelope::update(void)
 
 
 	transmit(block);
-	release(triggerInlet);
+
 	release(block);
+}
+
+
+void AudioADSREnvelope::updateMidiInput()
+{
+	
+	
+  
+	audio_block_t *midiData;
+
+	midiData = receiveReadOnly(0);
+	if(!midiData) return;
+
+	
+	
+
+
+	int8_t *md = (int8_t *) midiData->data;
+
+	int pitch;
+	int velocity;
+
+	for (int l = 0; l < voiceNumber; l++)
+	{
+		md++;
+		md++;
+	}
+	pitch = *md++;
+	velocity = *md;
+
+	Serial.print("voiceNumber");Serial.println(voiceNumber);
+	Serial.print("pitch");Serial.println(pitch);
+	Serial.print("velocity");Serial.println(velocity);
+
+	if (velocity) noteOn();
+	else noteOff();
+
+	// noteNumber = (int8_t *) midiData->data;
+	// Serial.print("mididata: ");
+	// Serial.println(*noteNumber++);
+	// Serial.println(*noteNumber++);
+	// Serial.println(*noteNumber++);
+	// Serial.println(*noteNumber++);
+
+	release(midiData);
+	
 }
 
 bool AudioADSREnvelope::isActive()
@@ -289,23 +340,6 @@ bool AudioADSREnvelope::isSustain()
 	uint8_t current_state = *(volatile uint8_t *)&state;
 	if (current_state == STATE_SUSTAIN) return true;
 	return false;
-}
-
-void AudioADSREnvelope::checkInletState()
-{
-
-	Serial.println("got this far!");
-	if(inletState == LOW && *trig > 16384 ) 
-	{
-		inletState = HIGH;
-		noteOn();
-	}
-	else if (inletState == HIGH && *trig < 16384) 
-	{
-		inletState = LOW;
-		noteOff();
-	}
-	trig += 8;
 }
 
 

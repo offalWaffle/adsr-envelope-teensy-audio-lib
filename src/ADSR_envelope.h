@@ -66,13 +66,15 @@ class ExpLogCurveTable
 class AudioADSREnvelope : public AudioStream
 {
 public:
-	AudioADSREnvelope(); 
-	AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes);
+	AudioADSREnvelope(uint8_t voice_number = 0); 
+	AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes, uint8_t voice_number = 0);
 
 	~AudioADSREnvelope();
 
 	void noteOn();
 	void noteOff();
+
+	void updateMidiInput();
 	
 	void attack(float milliseconds) {
 		attack_count = milliseconds2count(milliseconds);
@@ -142,11 +144,13 @@ private:
 	uint16_t peakAmplitude, releaseStartAmplitude, sustainAmplitude;
 	bool curveTablesOnTheHeap;
 
-
-	audio_block_t * triggerInlet;
-	int16_t * trig;
-	bool inletState;
+	// audio_block_t * triggerInlet;
+	// int16_t * trig;
+	// bool inletState;
 	void checkInletState();
+
+	uint8_t voiceNumber;
+
 	
 
 
