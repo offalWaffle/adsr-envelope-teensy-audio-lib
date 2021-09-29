@@ -50,14 +50,14 @@
 
 
 
-AudioADSREnvelope::AudioADSREnvelope() 
-	: AudioStream(0, NULL),
-	totalCurveShapes(3)
+AudioADSREnvelope::AudioADSREnvelope(uint8_t voice_number = 0) 
+	: AudioStream(1, inputQueueArray),
+	totalCurveShapes(3), voiceNumber(voice_number)
 
 	
 {
 
-	curveShapeTable = new ExpLogCurveTable[3] {ExpLogCurveTable(DEFAULT_CURVE_BASE,  LOG_CURVE), //logarithmic
+	curveShapeTable = new ExpLogCurveTable[totalCurveShapes] {ExpLogCurveTable(DEFAULT_CURVE_BASE,  LOG_CURVE), //logarithmic
 											   ExpLogCurveTable(1,  EXP_CURVE), //linear
 											   ExpLogCurveTable(DEFAULT_CURVE_BASE, EXP_CURVE)}; //exponential
 	
@@ -74,6 +74,8 @@ AudioADSREnvelope::AudioADSREnvelope()
 	release(300.0f);
 	noteRetriggerRelease(5.0f);
 
+	Serial.println("built adsr");
+
 	
 }
 AudioADSREnvelope::~AudioADSREnvelope()
@@ -81,10 +83,11 @@ AudioADSREnvelope::~AudioADSREnvelope()
 	if(curveTablesOnTheHeap) delete[] curveShapeTable;
 }
 
-AudioADSREnvelope::AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes) 
+AudioADSREnvelope::AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes, uint8_t voice_number = 0) 
 	: AudioStream(0, NULL) ,
 	curveShapeTable(ELCT) ,
-	totalCurveShapes(nbOfCurveShapes)
+	totalCurveShapes(nbOfCurveShapes),
+	voiceNumber(voice_number)
 {
 	state = 0;
 	attack(10.5f);
@@ -146,20 +149,36 @@ void AudioADSREnvelope::update(void)
 	audio_block_t *block;
 	uint16_t *p, *end;
 
+	updateMidiInput();
+	// delay(1);
+
+	//************
+	//set audioblock pointer and allocate
+	// triggerInlet = receiveReadOnly(0);
+    // if(!triggerInlet) return;
+	// trig = triggerInlet->data;
+
+
+	
 
 	block = allocate();
 	if (!block) return;
 	if (state == STATE_IDLE) {
 		
-		release(block);
-		return;
+		// release(block);
+		// return;
 	}
 	p = (uint16_t *)(block->data);
 	end = p + AUDIO_BLOCK_SAMPLES;
 
-	
+	// Serial.println("got this far!");
 
 	while (p < end) {
+
+		//************
+		// Serial.println("got this far!");
+		// checkInletState();
+
 
 		if (state == STATE_ATTACK) {
 		
@@ -253,8 +272,56 @@ void AudioADSREnvelope::update(void)
 		count--;
 	}
 
+
 	transmit(block);
+	// release(triggerInlet);
 	release(block);
+}
+
+
+void AudioADSREnvelope::updateMidiInput()
+{
+	
+	
+  
+	audio_block_t *midiData;
+
+	midiData = receiveReadOnly(0);
+	if(!midiData) return;
+
+	
+	
+
+
+	int8_t *md = (int8_t *) midiData->data;
+
+	int pitch;
+	int velocity;
+
+	for (int l = 0; l < voiceNumber; l++)
+	{
+		md++;
+		md++;
+	}
+	pitch = *md++;
+	velocity = *md;
+
+	Serial.print("voiceNumber");Serial.println(voiceNumber);
+	Serial.print("pitch");Serial.println(pitch);
+	Serial.print("velocity");Serial.println(velocity);
+
+	if (velocity) noteOn();
+	else noteOff();
+
+	// noteNumber = (int8_t *) midiData->data;
+	// Serial.print("mididata: ");
+	// Serial.println(*noteNumber++);
+	// Serial.println(*noteNumber++);
+	// Serial.println(*noteNumber++);
+	// Serial.println(*noteNumber++);
+
+	release(midiData);
+	
 }
 
 bool AudioADSREnvelope::isActive()
@@ -270,6 +337,23 @@ bool AudioADSREnvelope::isSustain()
 	if (current_state == STATE_SUSTAIN) return true;
 	return false;
 }
+
+// void AudioADSREnvelope::checkInletState()
+// {
+
+// 	// Serial.println("got this far!");
+// 	if(inletState == LOW && *trig > 16384 ) 
+// 	{
+// 		inletState = HIGH;
+// 		noteOn();
+// 	}
+// 	else if (inletState == HIGH && *trig < 16384) 
+// 	{
+// 		inletState = LOW;
+// 		noteOff();
+// 	}
+// 	trig += 8;
+// }
 
 
 
@@ -330,4 +414,5 @@ float ExpLogCurveTable::getCurveLookupValue (float input)
     return mapFloat(scaledInput, (float) intScaledInput, (float) (intScaledInput + 1), curveLookupTable[intScaledInput], intScaledInput + 1 > TABLERESOLUTION ? curveLookupTable[intScaledInput] : curveLookupTable[intScaledInput + 1]);
 
 }
+
 
