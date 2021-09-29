@@ -50,9 +50,11 @@
 
 
 
+
 AudioADSREnvelope::AudioADSREnvelope(uint8_t voice_number = 0) 
 	: AudioStream(1, inputQueueArray),
 	totalCurveShapes(3), voiceNumber(voice_number)
+
 
 	
 {
@@ -149,11 +151,14 @@ void AudioADSREnvelope::update(void)
 	audio_block_t *block;
 	uint16_t *p, *end;
 
+
 	updateMidiInput();
+
 	// delay(1);
 
 	//************
 	//set audioblock pointer and allocate
+
 	// triggerInlet = receiveReadOnly(0);
     // if(!triggerInlet) return;
 	// trig = triggerInlet->data;
@@ -171,13 +176,12 @@ void AudioADSREnvelope::update(void)
 	p = (uint16_t *)(block->data);
 	end = p + AUDIO_BLOCK_SAMPLES;
 
-	// Serial.println("got this far!");
+
 
 	while (p < end) {
 
 		//************
-		// Serial.println("got this far!");
-		// checkInletState();
+
 
 
 		if (state == STATE_ATTACK) {
@@ -274,7 +278,7 @@ void AudioADSREnvelope::update(void)
 
 
 	transmit(block);
-	// release(triggerInlet);
+
 	release(block);
 }
 
@@ -337,23 +341,6 @@ bool AudioADSREnvelope::isSustain()
 	if (current_state == STATE_SUSTAIN) return true;
 	return false;
 }
-
-// void AudioADSREnvelope::checkInletState()
-// {
-
-// 	// Serial.println("got this far!");
-// 	if(inletState == LOW && *trig > 16384 ) 
-// 	{
-// 		inletState = HIGH;
-// 		noteOn();
-// 	}
-// 	else if (inletState == HIGH && *trig < 16384) 
-// 	{
-// 		inletState = LOW;
-// 		noteOff();
-// 	}
-// 	trig += 8;
-// }
 
 
 

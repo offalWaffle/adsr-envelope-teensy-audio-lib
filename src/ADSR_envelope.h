@@ -34,7 +34,8 @@
 #define MAXAMPLITUDE 0b0111111111111111 //2's complement max value
 
 #define TABLERESOLUTION 100
-#define MULTIPLICATIONFACTOR 10
+#define MULTIPLICATIONFACTOR 10 //multiplication factor used to keep exponential function from overflowing
+
 
 
 class ExpLogCurveTable
@@ -143,13 +144,13 @@ private:
 	uint16_t peakAmplitude, releaseStartAmplitude, sustainAmplitude;
 	bool curveTablesOnTheHeap;
 
-
 	// audio_block_t * triggerInlet;
 	// int16_t * trig;
 	// bool inletState;
 	void checkInletState();
 
 	uint8_t voiceNumber;
+
 	
 
 
