@@ -1,60 +1,11 @@
-/* Audio Library for Teensy 3.X
- * Copyright (c) 2017, Paul Stoffregen, paul@pjrc.com
- *
- * Development of this audio library was funded by PJRC.COM, LLC by sales of
- * Teensy and Audio Adaptor boards.  Please support PJRC's efforts to develop
- * open source software by purchasing Teensy or other PJRC products.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice, development funding notice, and this permission
- * notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- */
-
 #include <Arduino.h>
 #include "ADSR_envelope.h"
-
-#define STATE_IDLE	0
-#define STATE_ATTACK	1
-#define STATE_DECAY	2
-#define STATE_SUSTAIN	3
-#define STATE_RELEASE	4
-#define STATE_FORCED	5
-
-#define LOG_CURVE 0
-#define EXP_CURVE 1
-
-#define DEFAULT_CURVE_BASE 1.6
-
-// TO DO retrigger noteon should have 2 options: start attack from current amplitude 
-//												or reset to 0 then retrigger from 0 amplitude
-
-// TO DO exponential scaler (in a different module) for setting time values (small increments at low values, bigger steps higher up)
-// TO DO global time factor to change attack/decay/release time with one knob. (like ableton time param)
-// TO DO measure performance vs teensy lib envelope
-// TO DO noteon + noteoff changes to change member variables only at start of audio block processing (when update is called)
-// this allows for potential synchronicity between audio block updates (when retriggering samplegrain object for example)
-
 
 
 
 AudioADSREnvelope::AudioADSREnvelope(uint8_t voice_number = 0) 
 	: AudioStream(1, inputQueueArray),
 	totalCurveShapes(3), voiceNumber(voice_number)
-
 
 	
 {
@@ -106,10 +57,6 @@ AudioADSREnvelope::AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes
 }
 
 
-
-
-
-
 void AudioADSREnvelope::noteOn(void)
 {
 	__disable_irq();
@@ -135,12 +82,8 @@ void AudioADSREnvelope::noteOff(void)
 	__disable_irq();
 	if (state != STATE_IDLE && state != STATE_FORCED) {
 
-		
-
 		state = STATE_RELEASE;
 		count = release_count;
-		inc_hires = (-mult_hires) / (int32_t)count;
-
 		releaseStartAmplitude = targetAmplitude;
 	}
 	__enable_irq();
@@ -151,37 +94,22 @@ void AudioADSREnvelope::update(void)
 	audio_block_t *block;
 	uint16_t *p, *end;
 
-
+	//get midi input data
 	updateMidiInput();
-
-	// delay(1);
-
-	//************
-	//set audioblock pointer and allocate
-
-	// triggerInlet = receiveReadOnly(0);
-    // if(!triggerInlet) return;
-	// trig = triggerInlet->data;
-
-
-	
 
 	block = allocate();
 	if (!block) return;
 	if (state == STATE_IDLE) {
 		
-		// release(block);
-		// return;
+		release(block);
+		return;
 	}
+
 	p = (uint16_t *)(block->data);
 	end = p + AUDIO_BLOCK_SAMPLES;
 
-
-
+	//iterate through samples in buffer
 	while (p < end) {
-
-		//************
-
 
 
 		if (state == STATE_ATTACK) {
@@ -278,51 +206,36 @@ void AudioADSREnvelope::update(void)
 
 
 	transmit(block);
-
 	release(block);
 }
 
 
 void AudioADSREnvelope::updateMidiInput()
 {
-	
-	
-  
 	audio_block_t *midiData;
 
 	midiData = receiveReadOnly(0);
 	if(!midiData) return;
 
-	
-	
 
-
+	//read midi data from input buffer
 	int8_t *md = (int8_t *) midiData->data;
 
 	int pitch;
 	int velocity;
 
+	//skip to relevant voice number
 	for (int l = 0; l < voiceNumber; l++)
 	{
 		md++;
 		md++;
 	}
+
 	pitch = *md++;
 	velocity = *md;
 
-	Serial.print("voiceNumber");Serial.println(voiceNumber);
-	Serial.print("pitch");Serial.println(pitch);
-	Serial.print("velocity");Serial.println(velocity);
-
 	if (velocity) noteOn();
 	else noteOff();
-
-	// noteNumber = (int8_t *) midiData->data;
-	// Serial.print("mididata: ");
-	// Serial.println(*noteNumber++);
-	// Serial.println(*noteNumber++);
-	// Serial.println(*noteNumber++);
-	// Serial.println(*noteNumber++);
 
 	release(midiData);
 	
@@ -344,7 +257,6 @@ bool AudioADSREnvelope::isSustain()
 
 
 
-
 ExpLogCurveTable::ExpLogCurveTable (float base, bool curveType)
 : powBase (base),
 multFactor (MULTIPLICATIONFACTOR),
@@ -352,6 +264,7 @@ curveType (curveType)
 {
     generateLookupValues();
 }
+
 
 void ExpLogCurveTable::generateLookupValues()
 {

@@ -1,27 +1,22 @@
-/* Audio Library for Teensy 3.X
- * Copyright (c) 2017, Paul Stoffregen, paul@pjrc.com
- *
- * Development of this audio library was funded by PJRC.COM, LLC by sales of
- * Teensy and Audio Adaptor boards.  Please support PJRC's efforts to develop
- * open source software by purchasing Teensy or other PJRC products.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice, development funding notice, and this permission
- * notice shall be included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+/* 
+ADSR envelope audiostream derived class
+This is an enhancement to the envelope class in the Teensy Audio Library as it allows users to set
+the type of curve for the attack, decay and release phases of the envelope to either logarithmic, linear or exponential.
+This makes for more natural sounding attack and decay characteristics.
+
+Audio signal input has been removed and only generates an audio rate control signal. To apply this envelope
+to an audio rate signal, use a AudioEffectMultiply object with the envelope signal in 1 input and the
+audio signal in the other. This matches more closely the EG -> VCA paradigm used in synth design. 
+
+The ExpLogCurveTable class is used to generate a lookup table that is generated at instantiation. 
+
+Connections:
+Port	Purpose
+In 0	Midi Note Data
+Out 0	Envelope 
+
+
+
  */
 
 #ifndef adsr_envelope_h_
@@ -33,22 +28,28 @@
 #define SAMPLES_PER_MSEC (AUDIO_SAMPLE_RATE_EXACT/1000.0)
 #define MAXAMPLITUDE 0b0111111111111111 //2's complement max value
 
-#define TABLERESOLUTION 100
+#define TABLERESOLUTION 100 // curve lookup table resolution
 #define MULTIPLICATIONFACTOR 10 //multiplication factor used to keep exponential function from overflowing
 
+#define STATE_IDLE	0
+#define STATE_ATTACK	1
+#define STATE_DECAY	2
+#define STATE_SUSTAIN	3
+#define STATE_RELEASE	4
+#define STATE_FORCED	5
 
+#define LOG_CURVE 0
+#define EXP_CURVE 1
+
+#define DEFAULT_CURVE_BASE 1.6 // this base number provides a 
 
 class ExpLogCurveTable
 {
     public:
-	ExpLogCurveTable ();
-    ExpLogCurveTable (float base, bool curveType );
-
+    ExpLogCurveTable (float base, bool curveType ); //constructor
 
     void generateLookupValues ();
     void setBase(float base){powBase = base;}
-    
-
     float getCurveLookupValue (float input);
     
 
@@ -60,13 +61,15 @@ class ExpLogCurveTable
     bool curveType; //0 is exponential, 1 is logarithmic
     
 
-
 };
 
 class AudioADSREnvelope : public AudioStream
 {
 public:
+	// this constructor generates 3 default curves (log, lin and exp) using DEFAULT_CURVE_BASE value
 	AudioADSREnvelope(uint8_t voice_number = 0); 
+
+	//this contructor allows the user to pass any number of user defined ExpLogCurveTable objects
 	AudioADSREnvelope(ExpLogCurveTable* ELCT, int nbOfCurveShapes, uint8_t voice_number = 0);
 
 	~AudioADSREnvelope();
@@ -115,6 +118,7 @@ public:
 	bool isSustain();
 	using AudioStream::release;
 	virtual void update(void);
+	
 private:
 	uint16_t milliseconds2count(float milliseconds) {
 		if (milliseconds < 0.0) milliseconds = 0.0;
@@ -122,6 +126,7 @@ private:
 		if (c > 65535) c = 65535; // allow up to 11.88 seconds
 		return c;
 	}
+
 	audio_block_t *inputQueueArray[1];
 	// state
 	uint8_t  state;      // idle, attack, decay, sustain, release, forced
@@ -129,7 +134,7 @@ private:
 	int32_t  mult_hires; // attenuation, 0=off, 0x40000000=unity gain
 	int32_t  inc_hires;  // amount to change mult_hires every 8 samples
 
-	// settings
+	// counters
 	uint16_t attack_count;
 	uint16_t decay_count;
 	int32_t  sustain_mult;
@@ -144,17 +149,8 @@ private:
 	uint16_t peakAmplitude, releaseStartAmplitude, sustainAmplitude;
 	bool curveTablesOnTheHeap;
 
-	// audio_block_t * triggerInlet;
-	// int16_t * trig;
-	// bool inletState;
 	void checkInletState();
-
-	uint8_t voiceNumber;
-
-	
-
-
-
+	uint8_t voiceNumber; 
 
 };
 
